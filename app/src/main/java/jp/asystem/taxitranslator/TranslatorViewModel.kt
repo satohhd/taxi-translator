@@ -269,6 +269,9 @@ class TranslatorViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun listenLoopInner() {
         // 認識ビープ音の抑止。合間に解除すると終了音が漏れるためループ全体で維持する
         speech.setBeepMuted(true)
+        // エラーが連発したら再試行間隔を段階的に延ばす(聞き取り中⇔待機のチャタリング防止)
+        var errorStreak = 0
+        fun backoff(base: Long): Long = (base * (errorStreak + 1)).coerceAtMost(5_000L)
         while (currentCoroutineContext().isActive) {
             val state = _ui.value
             val locale = listenLocale(state)
@@ -293,18 +296,31 @@ class TranslatorViewModel(app: Application) : AndroidViewModel(app) {
 
             val text = finalText
             when {
-                text != null -> processUtterance(text)
-                // 無音・不一致・認識サービスの瞬断は正常系として静かに待受を続ける
+                text != null -> {
+                    errorStreak = 0
+                    processUtterance(text)
+                }
+                // 無音・不一致は正常系として静かに待受を続ける
                 errorCode == null ||
                     errorCode == SpeechRecognizer.ERROR_NO_MATCH ||
-                    errorCode == SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> delay(200)
-                errorCode == SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> delay(500)
+                    errorCode == SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                    errorStreak = 0
+                    delay(200)
+                }
+                // 認識サービスの瞬断・ビジーは静かに再試行(連発時は間隔を延ばす)
+                errorCode == SpeechRecognizer.ERROR_SERVER_DISCONNECTED ||
+                    errorCode == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                    errorCode == SpeechRecognizer.ERROR_CLIENT -> {
+                    errorStreak++
+                    delay(backoff(500))
+                }
                 errorCode == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                     onPermissionDenied()
                     return
                 }
                 errorCode == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
                     errorCode == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> {
+                    errorStreak++
                     _ui.update {
                         it.copy(
                             statusMessage =
@@ -312,11 +328,12 @@ class TranslatorViewModel(app: Application) : AndroidViewModel(app) {
                                     "(設定 → Google → 音声認識のオフライン言語)",
                         )
                     }
-                    delay(1000)
+                    delay(backoff(1000))
                 }
                 else -> {
+                    errorStreak++
                     _ui.update { it.copy(statusMessage = "音声認識エラー(code=$errorCode)") }
-                    delay(1000)
+                    delay(backoff(1000))
                 }
             }
         }
@@ -500,6 +517,7 @@ class TranslatorViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         nearby?.stop()
+        speech.close()
         tts.shutdown()
         mlKit.close()
     }

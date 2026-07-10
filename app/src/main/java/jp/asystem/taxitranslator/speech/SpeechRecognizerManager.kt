@@ -98,8 +98,25 @@ class SpeechRecognizerManager(private val context: Context) {
         }
     }
 
+    /**
+     * 使い回す認識インスタンス。毎回の生成/破棄はサービスの再バインド連発になり、
+     * 端末によっては瞬断(ERROR_SERVER_DISCONNECTED)を誘発するため避ける。
+     */
+    private var recognizer: SpeechRecognizer? = null
+
+    private fun obtainRecognizer(): SpeechRecognizer =
+        recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { recognizer = it }
+
+    /** サービス側が不調のときに呼び、次回の聞き取りで作り直させる。 */
+    private fun discardRecognizer() {
+        runCatching { recognizer?.destroy() }
+        recognizer = null
+    }
+
+    fun close() = discardRecognizer()
+
     fun listenOnce(locale: Locale, preferOffline: Boolean): Flow<Event> = callbackFlow {
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+        val recognizer = obtainRecognizer()
 
         recognizer.setRecognitionListener(object : RecognitionListener {
             override fun onPartialResults(partialResults: Bundle?) {
@@ -120,6 +137,13 @@ class SpeechRecognizerManager(private val context: Context) {
             }
 
             override fun onError(error: Int) {
+                // サービスの瞬断・ビジー・クライアント異常は、インスタンスを作り直して回復を図る
+                if (error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED ||
+                    error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                    error == SpeechRecognizer.ERROR_CLIENT
+                ) {
+                    discardRecognizer()
+                }
                 trySend(Event.Error(error))
                 close()
             }
@@ -146,8 +170,8 @@ class SpeechRecognizerManager(private val context: Context) {
         recognizer.startListening(intent)
 
         awaitClose {
-            recognizer.cancel()
-            recognizer.destroy()
+            // インスタンスは使い回すため destroy はしない(close()/不調時のみ破棄)
+            runCatching { recognizer.cancel() }
         }
     }
 }
