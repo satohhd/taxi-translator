@@ -62,7 +62,7 @@ fun TranslatorScreen(
     onDirectionChange: (Direction) -> Unit,
     onTargetChange: (TargetLanguage) -> Unit,
     onToggleTts: () -> Unit,
-    onToggleOffline: () -> Unit,
+    onSetOffline: (Boolean) -> Unit,
     onReset: () -> Unit,
 ) {
     val isPortrait =
@@ -78,7 +78,7 @@ fun TranslatorScreen(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        TopBar(ui, isPortrait, onDirectionChange, onToggleTts, onToggleOffline)
+        TopBar(ui, isPortrait, onDirectionChange, onToggleTts, onSetOffline)
 
         val compactHeight = LocalConfiguration.current.screenHeightDp < 600
         if (isPortrait) {
@@ -199,7 +199,7 @@ private fun TopBar(
     isPortrait: Boolean,
     onDirectionChange: (Direction) -> Unit,
     onToggleTts: () -> Unit,
-    onToggleOffline: () -> Unit,
+    onSetOffline: (Boolean) -> Unit,
 ) {
     if (isPortrait) {
         // 縦向き: ブランド+マイク状態の行と、チップ類の折返し行の2段構成
@@ -225,8 +225,7 @@ private fun TopBar(
                 )
                 StatusPill(
                     highPrecision = ui.highPrecision,
-                    forced = ui.forcedOffline,
-                    onClick = onToggleOffline,
+                    onSetOffline = onSetOffline,
                 )
             }
         }
@@ -253,8 +252,7 @@ private fun TopBar(
             )
             StatusPill(
                 highPrecision = ui.highPrecision,
-                forced = ui.forcedOffline,
-                onClick = onToggleOffline,
+                onSetOffline = onSetOffline,
             )
         }
     }
@@ -352,32 +350,71 @@ private fun PeerPill(connected: Boolean) {
 }
 
 @Composable
-private fun StatusPill(highPrecision: Boolean, forced: Boolean, onClick: () -> Unit) {
-    // スマホでは表記を短縮してバーの占有幅を抑える
+private fun StatusPill(highPrecision: Boolean, onSetOffline: (Boolean) -> Unit) {
     val compact = LocalConfiguration.current.smallestScreenWidthDp < 600
-    Row(
-        modifier = Modifier
-            .background(Palette.Pane, RoundedCornerShape(50))
-            .border(1.dp, Palette.Border, RoundedCornerShape(50))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
+    if (compact) {
+        // スマホ: 標準⇔高精度のセグメント切替ボタン
+        Row(
             modifier = Modifier
-                .size(8.dp)
-                .background(if (highPrecision) Palette.Green else Palette.Amber, CircleShape)
-        )
+                .background(Palette.Pane, RoundedCornerShape(50))
+                .border(1.dp, Palette.Border, RoundedCornerShape(50))
+                .padding(3.dp),
+        ) {
+            SegmentChip(
+                text = "標準",
+                selected = !highPrecision,
+                selectedBg = Palette.Amber,
+            ) { onSetOffline(true) }
+            SegmentChip(
+                text = "高精度",
+                selected = highPrecision,
+                selectedBg = Palette.Green,
+            ) { onSetOffline(false) }
+        }
+    } else {
+        // タブレット: 状態表示ピル(タップで切替)
+        Row(
+            modifier = Modifier
+                .background(Palette.Pane, RoundedCornerShape(50))
+                .border(1.dp, Palette.Border, RoundedCornerShape(50))
+                .clickable { onSetOffline(highPrecision) }
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(if (highPrecision) Palette.Green else Palette.Amber, CircleShape)
+            )
+            Text(
+                if (highPrecision) "オンライン・高精度" else "オフライン・標準",
+                color = Palette.Text,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SegmentChip(
+    text: String,
+    selected: Boolean,
+    selectedBg: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .background(if (selected) selectedBg else Color.Transparent, RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+    ) {
         Text(
-            when {
-                highPrecision -> if (compact) "高精度" else "オンライン・高精度"
-                forced -> if (compact) "簡易(手動)" else "オフライン・簡易(手動)"
-                else -> if (compact) "簡易" else "オフライン・簡易"
-            },
-            color = Palette.Text,
+            text,
+            color = if (selected) Palette.AmberDark else Palette.TextDim,
             fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Bold,
         )
     }
 }

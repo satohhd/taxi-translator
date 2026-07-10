@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
                     onDirectionChange = viewModel::setDirection,
                     onTargetChange = viewModel::setTarget,
                     onToggleTts = viewModel::toggleTts,
-                    onToggleOffline = viewModel::toggleForcedOffline,
+                    onSetOffline = viewModel::setForcedOffline,
                     onReset = viewModel::reset,
                 )
             }

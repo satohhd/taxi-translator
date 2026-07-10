@@ -148,7 +148,7 @@ class TranslatorViewModel(app: Application) : AndroidViewModel(app) {
             listOf(Locale.JAPANESE) + TargetLanguage.entries.filter { it.enabled }.map { it.locale }
         )
         if (claude == null) {
-            _ui.update { it.copy(statusMessage = "APIキー未設定のため常に簡易モードで動作します") }
+            _ui.update { it.copy(statusMessage = "APIキー未設定のため常に標準モードで動作します") }
         }
         restartListening()
     }
@@ -196,22 +196,27 @@ class TranslatorViewModel(app: Application) : AndroidViewModel(app) {
         restartListening()
     }
 
-    /** 高精度(オンライン)⇔簡易(オフライン)の手動切替。実際に圏外の場合はオンラインにできない。 */
-    fun toggleForcedOffline() {
+    /**
+     * 標準(端末内翻訳)⇔高精度(Claude)の手動切替。
+     * 実際に圏外・APIキー未設定の場合は高精度にできず、理由を表示する。
+     */
+    fun setForcedOffline(forced: Boolean) {
         val state = _ui.value
-        val forcing = !state.forcedOffline
-        if (!forcing && !state.online) {
-            _ui.update { it.copy(statusMessage = "圏外のためオンラインに切替できません") }
-            return
+        if (!forced) {
+            if (!state.online) {
+                _ui.update { it.copy(statusMessage = "圏外のため高精度モードにできません") }
+                return
+            }
+            if (!state.claudeConfigured) {
+                _ui.update { it.copy(statusMessage = "APIキー未設定のため高精度モードにできません") }
+                return
+            }
         }
-        if (!forcing && !state.claudeConfigured) {
-            _ui.update { it.copy(statusMessage = "APIキー未設定のためオンラインに切替できません") }
-            return
-        }
+        if (forced == state.forcedOffline) return
         _ui.update {
             it.copy(
-                forcedOffline = forcing,
-                statusMessage = if (forcing) "簡易モードに固定しました(タップで解除)" else null,
+                forcedOffline = forced,
+                statusMessage = if (forced) "標準モード(端末内翻訳)に切り替えました" else null,
             )
         }
         restartListening()
@@ -402,7 +407,7 @@ class TranslatorViewModel(app: Application) : AndroidViewModel(app) {
                 // 言語切替・リセット等による中断はエラーではないのでそのまま伝播させる
                 throw e
             } catch (e: Exception) {
-                _ui.update { it.copy(statusMessage = "オンライン翻訳に失敗したため簡易翻訳に切替えました") }
+                _ui.update { it.copy(statusMessage = "高精度翻訳に失敗したため標準翻訳に切替えました") }
                 translation = translateOffline(raw, jaToForeign, state.target)
             }
         } else {
@@ -450,7 +455,7 @@ class TranslatorViewModel(app: Application) : AndroidViewModel(app) {
         throw e
     } catch (e: Exception) {
         _ui.update {
-            it.copy(statusMessage = "簡易翻訳に失敗しました(翻訳モデルが未ダウンロードの可能性)")
+            it.copy(statusMessage = "標準翻訳に失敗しました(翻訳モデルが未ダウンロードの可能性)")
         }
         null
     }
