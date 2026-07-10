@@ -23,8 +23,8 @@ android {
         applicationId = "jp.asystem.taxitranslator"
         minSdk = 29
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.6.2-poc"
+        versionCode = 14
+        versionName = "0.6.4-poc"
         buildConfigField("String", "ANTHROPIC_API_KEY", "\"$anthropicApiKey\"")
         buildConfigField("String", "CLAUDE_MODEL", "\"claude-haiku-4-5\"")
     }

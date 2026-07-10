@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -78,11 +80,24 @@ fun TranslatorScreen(
     ) {
         TopBar(ui, isPortrait, onDirectionChange, onToggleTts, onToggleOffline)
 
+        val compactHeight = LocalConfiguration.current.screenHeightDp < 600
         if (isPortrait) {
             // 縦向き: ペインを縦積みし、言語選択は下部の横並びに
             SourcePane(ui, modifier = Modifier.weight(1f))
             TranslationPane(ui, modifier = Modifier.weight(1.15f))
             LanguageRow(ui, onTargetChange)
+        } else if (compactHeight) {
+            // スマホ横向き: 上下積みでは各ペインが低すぎて読めないため左右に分割する
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SourcePane(ui, modifier = Modifier.weight(1f).fillMaxHeight())
+                TranslationPane(ui, modifier = Modifier.weight(1f).fillMaxHeight())
+                LanguageRail(ui, onTargetChange)
+            }
         } else {
             Row(
                 modifier = Modifier
@@ -338,6 +353,8 @@ private fun PeerPill(connected: Boolean) {
 
 @Composable
 private fun StatusPill(highPrecision: Boolean, forced: Boolean, onClick: () -> Unit) {
+    // スマホでは表記を短縮してバーの占有幅を抑える
+    val compact = LocalConfiguration.current.smallestScreenWidthDp < 600
     Row(
         modifier = Modifier
             .background(Palette.Pane, RoundedCornerShape(50))
@@ -354,9 +371,9 @@ private fun StatusPill(highPrecision: Boolean, forced: Boolean, onClick: () -> U
         )
         Text(
             when {
-                highPrecision -> "オンライン・高精度"
-                forced -> "オフライン・簡易(手動)"
-                else -> "オフライン・簡易"
+                highPrecision -> if (compact) "高精度" else "オンライン・高精度"
+                forced -> if (compact) "簡易(手動)" else "オフライン・簡易(手動)"
+                else -> if (compact) "簡易" else "オフライン・簡易"
             },
             color = Palette.Text,
             fontSize = 12.sp,
@@ -497,8 +514,18 @@ private fun Badge(text: String, bg: Color, fg: Color) {
 
 @Composable
 private fun LanguageRail(ui: TranslatorUiState, onTargetChange: (TargetLanguage) -> Unit) {
+    // スマホ横向きなど高さの低い画面では全高6等分だとボタンが潰れて押せないため、
+    // 固定高+縦スクロールに切り替えてタップできる大きさを確保する
+    val compact = LocalConfiguration.current.screenHeightDp < 600
     Column(
-        modifier = Modifier.width(130.dp),
+        modifier =
+            if (compact) {
+                Modifier
+                    .width(130.dp)
+                    .verticalScroll(rememberScrollState())
+            } else {
+                Modifier.width(130.dp)
+            },
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
@@ -511,10 +538,11 @@ private fun LanguageRail(ui: TranslatorUiState, onTargetChange: (TargetLanguage)
         TargetLanguage.entries.forEach { lang ->
             val selected = lang == ui.target
             val alpha = if (lang.enabled) 1f else 0.35f
+            val sizeModifier =
+                if (compact) Modifier.fillMaxWidth().height(60.dp)
+                else Modifier.fillMaxWidth().weight(1f)
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
+                modifier = sizeModifier
                     .background(
                         if (selected) Palette.Amber.copy(alpha = alpha) else Palette.Pane.copy(alpha = alpha),
                         RoundedCornerShape(10.dp),
